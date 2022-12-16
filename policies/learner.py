@@ -204,7 +204,8 @@ class Learner:
             assert self.train_env.action_space.__class__.__name__ == "Discrete"
             self.act_dim = self.train_env.action_space.n
             self.act_continuous = False
-        self.obs_dim = self.train_env.observation_space.shape[0]  # include 1-dim done
+        # self.obs_dim = self.train_env.observation_space.shape[0]  # include 1-dim done
+        self.obs_dim = np.prod(self.train_env.observation_space.shape)  # include 1-dim done
         logger.log("obs_dim", self.obs_dim, "act_dim", self.act_dim)
 
     def init_agent(
@@ -236,7 +237,7 @@ class Learner:
 
         if image_encoder is not None:  # catch, keytodoor
             image_encoder_fn = lambda: ImageEncoder(
-                image_shape=self.train_env.image_space.shape, **image_encoder
+                image_shape=self.train_env.image_space, **image_encoder
             )
         else:
             image_encoder_fn = lambda: None
@@ -321,6 +322,7 @@ class Learner:
         log_interval,
         save_interval,
         log_tensorboard,
+        log_wandb,
         eval_stochastic=False,
         num_episodes_per_task=1,
         **kwargs
@@ -329,6 +331,7 @@ class Learner:
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.log_tensorboard = log_tensorboard
+        self.log_wandb = log_wandb
         self.eval_stochastic = eval_stochastic
         self.eval_num_episodes_per_task = num_episodes_per_task
 
@@ -422,6 +425,7 @@ class Learner:
                 obs = ptu.from_numpy(self.train_env.reset())  # reset
 
             obs = obs.reshape(1, obs.shape[-1])
+            # obs = obs.reshape(1, -1)
             done_rollout = False
 
             if self.agent_arch in [AGENT_ARCHS.Memory, AGENT_ARCHS.Memory_Markov]:
@@ -571,7 +575,7 @@ class Learner:
         return rl_losses_agg
 
     @torch.no_grad()
-    def evaluate(self, tasks, deterministic=True):
+    def evaluate(self, tasks, deterministic=True, n_videos=1):
 
         num_episodes = self.max_rollouts_per_task  # k
         # max_trajectory_len = k*H
@@ -588,8 +592,11 @@ class Learner:
         else:  # pomdp, rmdp, generalize
             num_steps_per_episode = self.eval_env._max_episode_steps
             observations = None
-
+        
+        frames_tasks = []
         for task_idx, task in enumerate(tasks):
+
+            frames_task = []
             step = 0
 
             if self.env_type == "meta" and self.eval_env.n_tasks is not None:
@@ -599,12 +606,15 @@ class Learner:
                 obs = ptu.from_numpy(self.eval_env.reset())  # reset
 
             obs = obs.reshape(1, obs.shape[-1])
+            # obs = obs.reshape(1, -1)
 
             if self.agent_arch == AGENT_ARCHS.Memory:
                 # assume initial reward = 0.0
                 action, reward, internal_state = self.agent.get_initial_info()
 
             for episode_idx in range(num_episodes):
+                frames_episode = []
+                
                 running_reward = 0.0
                 for _ in range(num_steps_per_episode):
                     if self.agent_arch == AGENT_ARCHS.Memory:
@@ -619,6 +629,9 @@ class Learner:
                         action, _, _, _ = self.agent.act(
                             obs, deterministic=deterministic
                         )
+                    if n_videos > 0:
+                        frame = self.eval_env.render(mode='rgb_array')
+                        frames_episode.append(frame)
 
                     # observe reward and next obs
                     next_obs, reward, done, info = utl.env_step(
@@ -662,10 +675,14 @@ class Learner:
                     if self.env_type == "meta" and info["done_mdp"] == True:
                         # for early stopping meta episode like Ant-Dir
                         break
-
+                
+                if n_videos > 0:
+                    frames_task.append(frames_episode)
                 returns_per_episode[task_idx, episode_idx] = running_reward
+            if n_videos > 0:
+                frames_tasks.append(frames_task)
             total_steps[task_idx] = step
-        return returns_per_episode, success_rate, observations, total_steps
+        return returns_per_episode, success_rate, observations, total_steps, frames_tasks
 
     def log_train_stats(self, train_stats):
         logger.record_step(self._n_env_steps_total)
@@ -695,12 +712,14 @@ class Learner:
                     success_rate_train,
                     observations,
                     total_steps_train,
+                    train_videos,
                 ) = self.evaluate(self.train_tasks[: len(self.eval_tasks)])
             (
                 returns_eval,
                 success_rate_eval,
                 observations_eval,
                 total_steps_eval,
+                eval_videos,
             ) = self.evaluate(self.eval_tasks)
             if self.eval_stochastic:
                 (
@@ -708,6 +727,7 @@ class Learner:
                     success_rate_eval_sto,
                     observations_eval_sto,
                     total_steps_eval_sto,
+                    eval_videos,
                 ) = self.evaluate(self.eval_tasks, deterministic=False)
 
             if self.train_env.n_tasks is not None and "plot_behavior" in dir(
@@ -803,7 +823,7 @@ class Learner:
                 for suffix, deterministic in zip(["", "_sto"], [True, False]):
                     if deterministic == False and self.eval_stochastic == False:
                         continue
-                    return_eval, success_eval, _, total_step_eval = self.evaluate(
+                    return_eval, success_eval, _, total_step_eval, eval_videos= self.evaluate(
                         eval_num_episodes_per_task * [None],
                         deterministic=deterministic,
                     )
@@ -825,7 +845,7 @@ class Learner:
                 logger.record_tabular(f"metrics/total_steps_eval_{k}", np.mean(v))
 
         elif self.env_type == "rmdp":
-            returns_eval, _, _, total_steps_eval = self.evaluate(self.eval_tasks)
+            returns_eval, _, _, total_steps_eval, eval_videos = self.evaluate(self.eval_tasks)
             returns_eval = returns_eval.squeeze(-1)
             # np.quantile is introduced in np v1.15, so we have to use np.percentile
             cutoff = np.percentile(returns_eval, 100 * self.worst_percentile)
@@ -849,7 +869,7 @@ class Learner:
             )
 
         elif self.env_type in ["pomdp", "credit", "atari"]:
-            returns_eval, success_rate_eval, _, total_steps_eval = self.evaluate(
+            returns_eval, success_rate_eval, _, total_steps_eval, videos = self.evaluate(
                 self.eval_tasks
             )
             if self.eval_stochastic:
@@ -858,6 +878,7 @@ class Learner:
                     success_rate_eval_sto,
                     _,
                     total_steps_eval_sto,
+                    eval_videos,
                 ) = self.evaluate(self.eval_tasks, deterministic=False)
 
             logger.record_tabular("metrics/total_steps_eval", np.mean(total_steps_eval))
@@ -882,6 +903,11 @@ class Learner:
 
         else:
             raise ValueError
+        
+        for i, task_video in enumerate(eval_videos):
+            for j, n_video in enumerate(task_video):
+                logger.add_video("trajectory/eval_task_{}_video_{}".format(i, j), np.array(n_video),)
+                # logger.add_video("trajectory/eval_task_{}_video_{}".format(i, j), np.transpose(n_video, (0,3,1,2)),)
 
         logger.record_tabular("z/time_cost", int(time.time() - self._start_time))
         logger.record_tabular(

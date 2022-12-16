@@ -7,13 +7,19 @@ import datetime
 import dateutil.tz
 import tempfile
 from collections import OrderedDict, Set
+import torch as th
+import numpy as np
+
+from matplotlib import pyplot as plt
+import wandb.data_types
+from typing import Any, Dict, List, Optional, Sequence, TextIO, Tuple, Union
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
 
-LOG_OUTPUT_FORMATS = ["stdout", "log", "csv", "tensorboard"]
+LOG_OUTPUT_FORMATS = ["stdout", "log", "csv", "tensorboard", "wandb"]
 # Also valid: json, tensorboard
 
 DEBUG = 10
@@ -206,6 +212,29 @@ class TensorBoardOutputFormat(KVWriter):
             self.writer.Close()
             self.writer = None
 
+class WAndBOutputFormat(KVWriter):
+
+    def __init__(self):
+        import wandb
+        self.step = 0
+
+    def writekvs(self, kvs):
+        wandb.log(kvs, self.step)
+
+    def add_figure(self, tag, figure):
+        images = wandb.Image(figure)
+        wandb.log({tag: images}, self.step)
+
+    def add_video(self, tag, figure, fps=30):
+        video = wandb.Video(figure, fps=fps, format='gif')
+        wandb.log({tag: video}, self.step)
+
+    def set_step(self, step):
+        self.step = step
+
+    def close(self):
+        wandb.finish()
+
 
 def make_output_format(format, ev_dir, log_suffix=""):
     os.makedirs(ev_dir, exist_ok=True)
@@ -219,6 +248,8 @@ def make_output_format(format, ev_dir, log_suffix=""):
         return CSVOutputFormat(osp.join(ev_dir, "progress.csv"))
     elif format == "tensorboard":
         return TensorBoardOutputFormat(ev_dir)
+    elif format == "wandb":
+        return WAndBOutputFormat()
     else:
         raise ValueError("Unknown format specified: %s" % (format,))
 
@@ -252,19 +283,24 @@ def logkvs(d):
         logkv(k, v)
 
 
-def set_tb_step(step):
+def set_step(step):
     """
-    record step for tensorboard
+    record step for tensorboard and wandb
     """
-    Logger.CURRENT.set_tb_step(step)
+    Logger.CURRENT.set_step(step)
 
 
 def add_figure(*args):
     """
-    add_figure for tensorboard
+    add_figure for tensorboard and wandb
     """
     Logger.CURRENT.add_figure(*args)
 
+def add_video(*args):
+    """
+    add_figure for wandb
+    """
+    Logger.CURRENT.add_video(*args)
 
 def dumpkvs():
     """
@@ -319,7 +355,7 @@ def get_dir():
 
 
 record_tabular = logkv
-record_step = set_tb_step
+record_step = set_step
 dump_tabular = dumpkvs
 
 
@@ -387,9 +423,9 @@ class Logger(object):
             if isinstance(fmt, TensorBoardOutputFormat):
                 fmt.add_figure(*args)
 
-    def set_tb_step(self, step):
+    def set_step(self, step):
         for fmt in self.output_formats:
-            if isinstance(fmt, TensorBoardOutputFormat):
+            if isinstance(fmt, TensorBoardOutputFormat) or isinstance(fmt, WAndBOutputFormat):
                 fmt.set_step(step)
 
     def dumpkvs(self):
@@ -399,6 +435,11 @@ class Logger(object):
             if isinstance(fmt, KVWriter):
                 fmt.writekvs(self.name2val)
         self.name2val.clear()
+
+    def add_video(self, *args):
+        for fmt in self.output_formats:
+            if type(fmt) is WAndBOutputFormat:
+                fmt.add_video(*args)
 
     def log(self, *args, level=INFO):
         if self.level <= level:

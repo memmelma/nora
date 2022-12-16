@@ -64,3 +64,61 @@ register(
     },
     max_episode_steps=200,
 )
+
+## Franka push + infer dynamics
+
+register(
+    "RobotPushEnvRGB-v0",
+    entry_point="envs.meta.tabletop.physics_env:PushEnv",
+    kwargs={
+        "n_tasks": 2,
+        "max_episode_steps": 200,
+        "assets_root": "envs/meta/tabletop/assets",
+        "block_colors": ["red", "red", "red"],
+        "goal_colors": ["green"],
+        "vis_obs": True
+    },
+    max_episode_steps=200,
+)
+
+register(
+    "RobotPushEnvState-v0",
+    entry_point="envs.meta.tabletop.physics_env:PushEnv",
+    kwargs={
+        "n_tasks": 2,
+        "max_episode_steps": 200,
+        "assets_root": "envs/meta/tabletop/assets",
+        "block_colors": ["yellow", "orange", "red"],
+        "goal_colors": ["green"],
+        "vis_obs": False
+    },
+    max_episode_steps=200,
+)
+
+register(
+    "RobotPushEnvState-v1",
+    entry_point="envs.meta.tabletop.physics_env:PushEnv",
+    kwargs={
+        "n_tasks": 2,
+        "max_episode_steps": 500,
+        "assets_root": "envs/meta/tabletop/assets",
+        "block_colors": ["yellow", "orange", "red"],
+        "goal_colors": ["green"],
+        "vis_obs": False
+    },
+    max_episode_steps=500,
+)
+
+register(
+    "RobotPushEnvState-v2",
+    entry_point="envs.meta.tabletop.physics_env:PushEnv",
+    kwargs={
+        "n_tasks": 2,
+        "max_episode_steps": 500,
+        "assets_root": "envs/meta/tabletop/assets",
+        "block_colors": ["yellow", "red"],
+        "goal_colors": ["green"],
+        "vis_obs": False
+    },
+    max_episode_steps=500,
+)
