@@ -124,8 +124,18 @@ class ImageEncoder(nn.Module):
     ):
         super(ImageEncoder, self).__init__()
         self.shape = image_shape
+
+        if type(kernel_size) is int:
+            kernel_size = [kernel_size for _ in range(len(depths))]
+        else:
+            kernel_size = kernel_size
+        if type(stride) is int:
+            stride = [stride for _ in range(len(depths))]
+        else:
+            stride = stride
+
         self.kernel_size = kernel_size
-        self.stride = stride
+        self.stride = stride 
         self.depths = [image_shape[0]] + depths
 
         layers = []
@@ -133,10 +143,10 @@ class ImageEncoder(nn.Module):
 
         for i in range(len(self.depths) - 1):
             layers.append(
-                nn.Conv2d(self.depths[i], self.depths[i + 1], kernel_size, stride)
+                nn.Conv2d(self.depths[i], self.depths[i + 1], kernel_size[i], stride[i])
             )
             layers.append(ACTIVATIONS[activation]())
-            h_w = conv_output_shape(h_w, kernel_size, stride)
+            h_w = conv_output_shape(h_w, kernel_size[i], stride[i])
 
         self.cnn = nn.Sequential(*layers)
 
@@ -162,7 +172,6 @@ class ImageEncoder(nn.Module):
             image = image / 255.0
 
         embed = self.cnn(image)  # (T*B, C, H, W)
-
         embed = torch.reshape(embed, list(batch_size) + [-1])  # (T, B, C*H*W)
         embed = self.linear(embed)  # (T, B, embed_size)
         return embed

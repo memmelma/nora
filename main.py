@@ -1,6 +1,9 @@
 # -*- coding: future_fstrings -*-
 import sys, os, time
 
+os.environ["PYBULLET_CONNECTION_MODE"] = "direct"
+os.environ["PYBULLET_RENDERER"] = "egl"
+
 t0 = time.time()
 import socket
 import numpy as np
@@ -33,6 +36,15 @@ flags.DEFINE_boolean(
 flags.DEFINE_boolean("debug", False, "debug mode")
 
 flags.FLAGS(sys.argv)
+
+# print("### REMOVE BEFORE RUNNING ACTUAL EXPERIMENTS ###")
+# FLAGS.cfg = "configs/meta/push/rnn.yml"
+# FLAGS.algo = "td3"
+
+# FLAGS.cfg = "configs/meta/point_robot/rnn.yml"
+# FLAGS.cfg = "/home/weirdlab/projects/pybullet/pomdp-baselines/configs/atari/rnn.yml"
+# FLAGS.algo = "sacd"
+
 yaml = YAML()
 v = yaml.load(open(FLAGS.cfg))
 
@@ -142,6 +154,16 @@ log_folder = os.path.join(exp_id, system.now_str())
 logger_formats = ["stdout", "log", "csv"]
 if v["eval"]["log_tensorboard"]:
     logger_formats.append("tensorboard")
+if v["eval"]["log_wandb"]:
+    logger_formats.append("wandb")
+    import wandb
+    os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
+    wandb.init(
+        project="meta",
+        group=env_name,
+        config=v,
+        settings=wandb.Settings(start_method='fork')
+    )
 logger.configure(dir=log_folder, format_strs=logger_formats, precision=4)
 logger.log(f"preload cost {time.time() - t0:.2f}s")
 

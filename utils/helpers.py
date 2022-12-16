@@ -50,7 +50,8 @@ def env_step(env, action):
     next_obs, reward, done, info = env.step(action)
 
     # move to torch
-    next_obs = ptu.from_numpy(next_obs).view(-1, next_obs.shape[0])
+    # next_obs = ptu.from_numpy(next_obs).view(-1, next_obs.shape[0])
+    next_obs = ptu.from_numpy(next_obs).view(1, -1)
     reward = ptu.FloatTensor([reward]).view(-1, 1)
     done = ptu.from_numpy(np.array(done, dtype=int)).view(-1, 1)
 

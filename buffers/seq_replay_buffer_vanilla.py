@@ -29,12 +29,20 @@ class SeqReplayBuffer:
         self._observation_dim = observation_dim
         self._action_dim = action_dim
 
-        self._observations = np.zeros(
+        if observation_dim > 5000:
+            self._observations = np.zeros(
+                (max_replay_buffer_size, observation_dim), dtype=np.int8
+            )
+            self._next_observations = np.zeros(
+                (max_replay_buffer_size, observation_dim), dtype=np.int8
+            )
+        else:
+            self._observations = np.zeros(
             (max_replay_buffer_size, observation_dim), dtype=np.float32
-        )
-        self._next_observations = np.zeros(
-            (max_replay_buffer_size, observation_dim), dtype=np.float32
-        )
+            )
+            self._next_observations = np.zeros(
+                (max_replay_buffer_size, observation_dim), dtype=np.float32
+            )
 
         self._actions = np.zeros((max_replay_buffer_size, action_dim), dtype=np.float32)
         self._rewards = np.zeros((max_replay_buffer_size, 1), dtype=np.float32)
