@@ -1,4 +1,5 @@
-# Recurrent Model-Free RL Can Be a Strong Baseline for Many POMDPs
+# NORA the explorer
+## Recurrent Model-Free RL Can Be a Strong Baseline for Many POMDPs
 Welcome to the POMDP world! 
 
 This repository provides some simple baselines for POMDPs, specifically the **recurrent model-free RL**, on the benchmarks in **several subareas of POMDPs** (including meta RL, robust RL, generalization in RL, temporal credit assignment) for the following paper accepted to **ICML 2022**: 
