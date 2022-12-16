@@ -30,6 +30,7 @@ eval:
   log_interval: 10 # (9x more frequent than dreamer)
   save_interval: -1
   log_tensorboard: true
+  log_wandb: true
 
 policy:
   separate: True

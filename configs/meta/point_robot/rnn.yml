@@ -31,6 +31,7 @@ eval:
   log_interval: 5 # 10 num of iters
   save_interval: 100 # -1
   log_tensorboard: true
+  log_wandb: false
 
 policy:
   separate: True

@@ -1,0 +1,73 @@
+seed: 1
+cuda: 0 # use_gpu
+env:
+  env_type: meta
+  env_name: RobotPushEnvRGB-v0
+  max_rollouts_per_task: 1 # k=2, H=200, H^+ =400
+
+  num_tasks: 100
+  num_train_tasks: 80
+  num_eval_tasks: 20
+
+train:
+  # sample complexity: MDP horizon * (num_init_rollouts_pool * num_train_tasks
+    #  + num_iters * num_tasks_sample * num_rollouts_per_iter)
+    # 200 * (250 * 80 + 500 * 1 * 25) -> 6.5M steps
+  # original rl training steps: num_iters * num_updates_per_iter = 500
+    # now makes it same as env steps
+
+  # total_rollouts = num_init_rollouts_pool + num_iters * num_rollouts_per_iter
+  # env_steps = total_rollouts * max_episode_steps
+  # rl_training_steps = num_iters * num_updates_per_iter 
+  num_iters: 500
+  num_init_rollouts_pool: 250 # before training
+  num_rollouts_per_iter: 25  #
+  buffer_size: 2e6
+
+  # Flexible training speed. Finally, our code supports flexible training speed by controlling the ratio of the numbers of gradient updates in RL w.r.t. the environment rollout steps (called num updates per iter in the code). The training speed is approximately proportional to the ratio if the simulator speed is much faster than the policy gradient update. Typically, the ratio is less than or equal to 1.0 to enjoy higher training speed.
+  num_updates_per_iter: 1 # equal, or positive integer
+  batch_size: 32 # to tune based on sampled_seq_len
+  sampled_seq_len: -1 # -1 is all, or positive integer
+  sample_weight_baseline: 0.0
+
+eval:
+  eval_stochastic: false # also eval stochastic policy
+  log_interval: 1 # 5 # num of iters
+  save_interval: 50
+  log_tensorboard: false
+  log_wandb: true
+policy:
+  seq_model: gru # [lstm, gru]
+  algo_name: sac # [td3, sac]
+
+  observ_embedding_size: 0
+  image_encoder:
+        embed_size: 128
+        depths: [32, 16]
+        kernel_size: [4, 4]
+        stride: [2, 2]
+        activation: relu
+        from_flattened: true
+        normalize_pixel: true
+
+  action_embedding_size: 16
+  reward_embedding_size: 16
+  rnn_hidden_size: 128
+
+  dqn_layers: [128, 128]
+  policy_layers: [128, 128]
+  lr: 0.0003
+  gamma: 0.99
+  tau: 0.005
+
+  sac:
+    entropy_alpha: 0.2
+    automatic_entropy_tuning: true
+    alpha_lr: 0.0003
+
+  td3:
+    ## since we normalize action space to [-1, 1]
+    ## the noise std is absolute value
+    exploration_noise: 0.1 
+    target_noise: 0.2
+    target_noise_clip: 0.5
